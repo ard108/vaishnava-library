@@ -70,7 +70,7 @@
             document.getElementById("setup-panel").classList.add("hidden");
             document.getElementById("main-panel").classList.remove("hidden");
             genAI = new GoogleGenerativeAI(key);
-            model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+            model = genAI.getGenerativeModel({ model: "gemini-pro" });
             loadDatabase();
         }
 
@@ -130,6 +130,7 @@
 </body>
 
 </html>
+
 
 
 
