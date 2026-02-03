@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+    <meta charset="UTF-8">
+    <title>Vaisnava AI Biblioteka</title>
+    <script type="importmap">
+      { "imports": { "@google/generative-ai": "https://esm.run/@google/generative-ai" } }
+    </script>
+    <style>
+        :root { --primary: #FF9933; --bg: #1a1a1a; --text: #e0e0e0; --card: #2d2d2d; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); max-width: 900px; margin: 0 auto; padding: 20px; line-height: 1.6; }
+        h1 { color: var(--primary); text-align: center; border-bottom: 2px solid var(--primary); padding-bottom: 10px; }
+        .box { background: var(--card); padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+        input, textarea { width: 100%; padding: 12px; margin: 10px 0; background: #404040; border: 1px solid #555; color: white; border-radius: 5px; }
+        button { background: var(--primary); color: white; border: none; padding: 12px; cursor: pointer; border-radius: 5px; width: 100%; font-weight: bold; }
+        button:hover { background: #e68a00; }
+        .hidden { display: none; }
+        .result { white-space: pre-wrap; margin-top: 20px; padding: 20px; background: #252525; border-left: 4px solid var(--primary); }
+    </style>
+</head>
+<body>
+
+    <h1>📚 Vaisnava Biblioteka AI</h1>
+
+    <div id="setup-panel" class="box">
+        <h3>🔑 Podešavanje</h3>
+        <p>Unesite Gemini API Key:</p>
+        <input type="password" id="apiKeyInput">
+        <button onclick="saveKey()">Sačuvaj i Kreni</button>
+        <p style="font-size: 12px;"><a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: var(--primary);">Uzmi besplatan ključ ovde</a></p>
+    </div>
+
+    <div id="main-panel" class="hidden">
+        <div class="box">
+            <p id="db-status" style="text-align:center; color:#888;">Čekam...</p>
+            <textarea id="userQuery" rows="3" placeholder="Pitanje (npr: Opiši Vrindavan...)"></textarea>
+            <div style="display:flex; gap:10px;">
+                <button onclick="askAI('short')">Kratak Odgovor</button>
+                <button onclick="askAI('long')">Napiši Esej</button>
+            </div>
+            <div id="loading" class="hidden" style="text-align:center; color:var(--primary); margin-top:10px;">⏳ AI razmišlja...</div>
+        </div>
+        <div id="output" class="result hidden"></div>
+    </div>
+
+    <script type="module">
+        import { GoogleGenerativeAI } from "@google/generative-ai";
+        
+        // SADA IMAMO 15 DELOVA
+        const DB_PARTS = [];
+        for(let i=1; i<=15; i++) { DB_PARTS.push(`baza_part_${i}.json`); }
+
+        let db = [];
+        let genAI = null;
+        let model = null;
+
+        window.onload = function() {
+            const key = localStorage.getItem("geminiKey");
+            if (key) initializeAI(key);
+        };
+
+        window.saveKey = function() {
+            const key = document.getElementById("apiKeyInput").value.trim();
+            if (!key) return alert("Unesite ključ!");
+            localStorage.setItem("geminiKey", key);
+            initializeAI(key);
+        }
+
+        function initializeAI(key) {
+            document.getElementById("setup-panel").classList.add("hidden");
+            document.getElementById("main-panel").classList.remove("hidden");
+            genAI = new GoogleGenerativeAI(key);
+            model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+            loadDatabase();
+        }
+
+        async function loadDatabase() {
+            const status = document.getElementById("db-status");
+            status.innerText = "📥 Učitavam 15 delova biblioteke...";
+            
+            try {
+                const promises = DB_PARTS.map(file => fetch(file).then(r => {
+                    if (!r.ok) throw new Error("Fajl fali");
+                    return r.json();
+                }));
+                const results = await Promise.all(promises);
+                db = results.flat();
+                status.innerText = `✅ Biblioteka spremna! (${db.length} segmenata)`;
+            } catch (error) {
+                status.innerText = "❌ Greška: Nisu svi fajlovi na GitHub-u!";
+            }
+        }
+
+        function findRelevantContext(query) {
+            if (!db.length) return "";
+            const terms = query.toLowerCase().split(" ").filter(w => w.length > 3);
+            const scored = db.map(chunk => {
+                let score = 0;
+                const txt = chunk.tekst.toLowerCase();
+                terms.forEach(term => { if (txt.includes(term)) score += 1; });
+                return { ...chunk, score };
+            });
+            // Uzimamo top 40 rezultata
+            return scored.sort((a, b) => b.score - a.score).slice(0, 40).map(r => `[${r.knjiga}]\n${r.tekst}`).join("\n\n---\n\n");
+        }
+
+        window.askAI = async function(type) {
+            const query = document.getElementById("userQuery").value;
+            if (!query) return alert("Upišite pitanje!");
+            
+            document.getElementById("loading").classList.remove("hidden");
+            document.getElementById("output").classList.add("hidden");
+            
+            const context = findRelevantContext(query);
+            
+            let sysPrompt = type === 'long' 
+                ? "You are a Vaisnava scholar. Write a LONG, DETAILED ESSAY (1500+ words). Use the provided context. Answer in the user's language." 
+                : "Answer concisely based on the context. Answer in the user's language.";
+
+            const prompt = `CONTEXT:\n${context}\n\nUSER QUESTION: ${query}\n\nSYSTEM: ${sysPrompt}`;
+
+            try {
+                const result = await model.generateContent(prompt);
+                document.getElementById("output").innerText = result.response.text();
+                document.getElementById("output").classList.remove("hidden");
+            } catch (e) { alert("Greška: " + e.message); } 
+            finally { document.getElementById("loading").classList.add("hidden"); }
+        }
+    </script>
+</body>
+</html>
